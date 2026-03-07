@@ -332,9 +332,7 @@
 
   // ─── Pipes ──────────────────────────────────────────────────────────────────
   function spawnPipe(now) {
-    const minY   = 120;
-    const maxY   = H - GROUND_H - PIPE_GAP - 120;
-    const gapTop = minY + Math.random() * (maxY - minY);
+    const gapTop = (H - GROUND_H - PIPE_GAP) / 2;
     pipes.push({ x: W + PIPE_W, gapTop, scored: false });
     lastPipeTime = now;
   }
