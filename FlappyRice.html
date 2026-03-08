@@ -157,9 +157,7 @@ let frameCount = 0;
 let particles = [];
 
 function spawnPipe() {
-  const minY = 80;
-  const maxY = H - 80 - PIPE_GAP;
-  const gapY = minY + Math.random() * (maxY - minY);
+  const gapY = (H - PIPE_GAP) / 2;
   pipes.push({
     x: W + 20,
     gapY,
