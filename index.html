@@ -236,7 +236,7 @@
 
   // ─── Constants ──────────────────────────────────────────────────────────────
   const GRAVITY       = 0.22;
-  const JUMP_VEL      = 9;
+  const JUMP_VEL      = -2;
   const PIPE_W        = 60;
   const PIPE_GAP      = 200;
   const PIPE_SPEED    = 1.8;
@@ -249,7 +249,7 @@
   let score = 0, best = parseInt(localStorage.getItem('fb_best') || '0');
   startBestEl.textContent = 'Best: ' + best;
 
-  let birdX, birdY, birdVX, birdVY, birdAngle;
+  let birdX, birdY, birdVY, birdAngle;
   let pipes = [];
   let lastPipeTime = 0;
   let bgOffset = 0;
@@ -286,7 +286,6 @@
   function initBird() {
     birdX    = W * 0.28;
     birdY    = H * 0.45;
-    birdVX   = 0;
     birdVY   = 0;
     birdAngle= 0;
   }
@@ -315,7 +314,7 @@
   }
 
   function jump() {
-    birdVX = JUMP_VEL;
+    birdVY = JUMP_VEL;
     spawnJumpParticles();
   }
 
@@ -577,10 +576,9 @@
       }
 
       // Bird physics
-      birdVX    += GRAVITY * dt;
-      birdX     += birdVX * dt;
+      birdVY    += GRAVITY * dt;
       birdY     += birdVY * dt;
-      birdAngle  = Math.max(-0.5, Math.min(Math.PI / 2, birdVX * 0.045));
+      birdAngle  = Math.max(-0.5, Math.min(Math.PI / 2, birdVY * 0.045));
 
       // Pipes
       if (!lastPipeTime || now - lastPipeTime > PIPE_INTERVAL) spawnPipe(now);
@@ -600,6 +598,7 @@
       // Ground / ceiling
       if (birdY + BIRD_R >= H - GROUND_H) {
         birdY = H - GROUND_H - BIRD_R;
+        die();
       }
       if (birdY - BIRD_R <= 0) {
         birdY = BIRD_R;
