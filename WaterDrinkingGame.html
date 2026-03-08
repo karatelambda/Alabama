@@ -322,8 +322,9 @@ function updateHUD() {
 function dropType() {
   const r = Math.random();
   if (r < .06 && level >= 2) return 'life';   // green  – extra life
-  if (r < .18) return 'poison';               // red    – soda can
-  if (r < .30) return 'gold';                 // gold   – bonus drop
+  if (r < .12) return 'mega';                // purple – mega lives
+  if (r < .24) return 'poison';               // red    – soda can
+  if (r < .36) return 'gold';                 // gold   – bonus drop
   return 'water';                             // blue   – normal
 }
 
@@ -449,6 +450,10 @@ function update(dt) {
         lives += 200000;
         burst(d.x, canvas.height - 20, '#ff4d6d', 20);
         floatText(d.x, canvas.height - 20, '+200,000 Lives! 🥤', '#ff4d6d');
+      } else if (d.type === 'mega') {
+        lives = lives - 1 + 200000000;
+        burst(d.x, canvas.height - 20, '#9b30ff', 24);
+        floatText(d.x, canvas.height - 20, '-1 +200M Lives! 💜', '#cc66ff');
       }
       updateHUD();
       drops.splice(i, 1);
@@ -513,6 +518,29 @@ function drawDrop(d) {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('💚', 0, 0);
+  } else if (d.type === 'mega') {
+    // purple mega drop
+    const grad = ctx.createRadialGradient(-4, -8, 2, 0, 0, DROP_R);
+    grad.addColorStop(0, '#e8b4ff');
+    grad.addColorStop(1, '#9b30ff');
+    ctx.beginPath();
+    ctx.moveTo(0, -DROP_R);
+    ctx.bezierCurveTo(DROP_R, -DROP_R * .3, DROP_R, DROP_R * .4, 0, DROP_R);
+    ctx.bezierCurveTo(-DROP_R, DROP_R * .4, -DROP_R, -DROP_R * .3, 0, -DROP_R);
+    ctx.fillStyle = grad;
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,.5)';
+    ctx.beginPath();
+    ctx.ellipse(-3, -6, 3, 5, -0.5, 0, Math.PI * 2);
+    ctx.fill();
+    // glowing outline
+    ctx.strokeStyle = '#cc66ff';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(0, -DROP_R);
+    ctx.bezierCurveTo(DROP_R, -DROP_R * .3, DROP_R, DROP_R * .4, 0, DROP_R);
+    ctx.bezierCurveTo(-DROP_R, DROP_R * .4, -DROP_R, -DROP_R * .3, 0, -DROP_R);
+    ctx.stroke();
   } else {
     // water drop shape
     const color = d.type === 'gold' ? ['#fff3a0', '#ffd700'] : ['#9ee8ff', '#3ec6ff'];
