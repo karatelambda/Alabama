@@ -580,7 +580,8 @@
       birdY     += birdVY * dt;
       birdAngle  = Math.max(-0.5, Math.min(Math.PI / 2, birdVY * 0.045));
 
-      // Pipes disabled
+      // Pipes
+      if (!lastPipeTime || now - lastPipeTime > PIPE_INTERVAL) spawnPipe(now);
 
       for (const p of pipes) {
         p.x -= PIPE_SPEED * dt;
