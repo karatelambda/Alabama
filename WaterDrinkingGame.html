@@ -183,6 +183,36 @@
     .dot.purple { background: #9b30ff; }
 
     #hidden { display: none; }
+
+    /* ── Shield button ── */
+    #shield-bar {
+      width: 100%;
+      max-width: 420px;
+      display: flex;
+      justify-content: center;
+      padding: 4px 0 2px;
+      position: relative;
+      z-index: 10;
+    }
+    #shieldBtn {
+      background: rgba(0,200,255,.12);
+      border: 2px solid rgba(0,200,255,.35);
+      border-radius: 22px;
+      color: #7fe8ff;
+      font-size: 13px;
+      font-weight: 700;
+      padding: 5px 22px;
+      cursor: pointer;
+      letter-spacing: .5px;
+      transition: background .15s, box-shadow .15s, border-color .15s;
+      touch-action: manipulation;
+    }
+    #shieldBtn.active {
+      background: rgba(0,220,255,.3);
+      border-color: #00eaff;
+      color: #fff;
+      box-shadow: 0 0 16px rgba(0,234,255,.55);
+    }
   </style>
 </head>
 <body>
@@ -201,6 +231,10 @@
 </div>
 <div id="goal-bar-wrap"><div id="goal-bar"></div></div>
 <div id="goal-label">Daily goal: <span id="ml-val">0</span> / 2000 ml</div>
+
+<div id="shield-bar">
+  <button id="shieldBtn">🛡️ Shield: OFF</button>
+</div>
 
 <canvas id="gameCanvas"></canvas>
 
@@ -264,10 +298,12 @@ let score, lives, level, ml, drops, particles, floatTexts, glassX, glassVx;
 let lastTime = 0, spawnTimer = 0;
 let shakeAmt = 0;
 let pointerX = null;
+let shieldActive = false;
 const GOAL_ML   = 2000;
 const GLASS_W   = 70;
 const GLASS_H   = 50;
 const DROP_R    = 14;
+const SHIELD_R  = 72; // radius of shield bubble around glass center
 
 // ── Resize ──
 function resize() {
@@ -313,6 +349,8 @@ function init() {
   spawnTimer = 0;
   shakeAmt   = 0;
   pointerX   = null;
+  shieldActive = false;
+  updateShieldBtn();
   updateHUD();
 }
 
@@ -343,6 +381,7 @@ function spawnDrop() {
   drops.push({
     x:      DROP_R + Math.random() * (canvas.width - DROP_R * 2),
     y:      -DROP_R,
+    vx:     0,
     vy:     speed,
     type,
     wobble: Math.random() * Math.PI * 2,
@@ -420,8 +459,41 @@ function update(dt) {
 
   for (let i = drops.length - 1; i >= 0; i--) {
     const d = drops[i];
+    d.x += d.vx;
     d.y += d.vy;
+    d.vx *= 0.97; // light air drag on horizontal
     d.wobble += 0.08;
+
+    // clamp x to canvas
+    if (d.x < DROP_R)              { d.x = DROP_R;              d.vx = Math.abs(d.vx); }
+    if (d.x > canvas.width - DROP_R) { d.x = canvas.width - DROP_R; d.vx = -Math.abs(d.vx); }
+
+    // shield bounce
+    if (shieldActive) {
+      const scx = glassX;
+      const scy = canvas.height - GLASS_H / 2 - 20;
+      const dx  = d.x - scx;
+      const dy  = d.y - scy;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < SHIELD_R + DROP_R) {
+        // surface normal pointing outward from shield center
+        const nx = dist > 0 ? dx / dist : 0;
+        const ny = dist > 0 ? dy / dist : -1;
+        // reflect velocity: v' = v - 2(v·n)n
+        const dot = d.vx * nx + d.vy * ny;
+        d.vx = d.vx - 2 * dot * nx;
+        d.vy = d.vy - 2 * dot * ny;
+        // ensure drop is moving away from shield center after bounce
+        if (d.vx * nx + d.vy * ny < 0) {
+          d.vx = nx * 5;
+          d.vy = ny * 5;
+        }
+        // push position just outside the shield so it doesn't re-collide
+        d.x = scx + nx * (SHIELD_R + DROP_R + 2);
+        d.y = scy + ny * (SHIELD_R + DROP_R + 2);
+        burst(d.x, d.y, '#00eaff', 8);
+      }
+    }
 
     // caught?
     if (d.y + DROP_R >= glassTop && d.y - DROP_R <= glassTop + GLASS_H
@@ -622,6 +694,56 @@ function drawGlass() {
   ctx.restore();
 }
 
+function drawShield() {
+  if (!shieldActive) return;
+  const scx = glassX;
+  const scy = canvas.height - GLASS_H / 2 - 20;
+  const t   = Date.now() * 0.003;
+
+  ctx.save();
+
+  // Soft inner fill
+  const fill = ctx.createRadialGradient(scx, scy, 0, scx, scy, SHIELD_R);
+  fill.addColorStop(0,   'rgba(0,234,255,0.06)');
+  fill.addColorStop(0.7, 'rgba(0,234,255,0.04)');
+  fill.addColorStop(1,   'rgba(0,234,255,0)');
+  ctx.fillStyle = fill;
+  ctx.beginPath();
+  ctx.arc(scx, scy, SHIELD_R, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Main glowing ring
+  ctx.shadowColor = '#00eaff';
+  ctx.shadowBlur  = 18;
+  ctx.strokeStyle = `rgba(0,234,255,${0.55 + 0.3 * Math.sin(t * 2)})`;
+  ctx.lineWidth   = 3;
+  ctx.beginPath();
+  ctx.arc(scx, scy, SHIELD_R, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // Second thinner ring (pulsing outward)
+  const pulse = SHIELD_R + 8 + 5 * Math.sin(t * 2.5);
+  ctx.strokeStyle = `rgba(127,232,255,${0.2 + 0.15 * Math.sin(t * 2.5)})`;
+  ctx.lineWidth   = 1.5;
+  ctx.shadowBlur  = 6;
+  ctx.beginPath();
+  ctx.arc(scx, scy, pulse, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // 3 spinning arc segments
+  for (let i = 0; i < 3; i++) {
+    const angle = t + (i * Math.PI * 2 / 3);
+    ctx.strokeStyle = 'rgba(0,234,255,0.6)';
+    ctx.lineWidth   = 2;
+    ctx.shadowBlur  = 10;
+    ctx.beginPath();
+    ctx.arc(scx, scy, SHIELD_R - 7, angle, angle + 0.7);
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
 function drawBackground() {
   ctx.save();
   const t = Date.now() * 0.0005;
@@ -668,7 +790,8 @@ function draw() {
   // drops
   for (const d of drops) drawDrop(d);
 
-  // glass
+  // glass + shield
+  drawShield();
   drawGlass();
 
   // float texts
@@ -735,6 +858,18 @@ function endGame(won = false) {
   goMessage.textContent     = msgs[Math.floor(Math.random() * msgs.length)];
   gameOverScr.style.display = 'flex';
 }
+
+// ── Shield toggle ──
+const shieldBtn = document.getElementById('shieldBtn');
+function updateShieldBtn() {
+  shieldBtn.textContent = shieldActive ? '🛡️ Shield: ON' : '🛡️ Shield: OFF';
+  shieldBtn.classList.toggle('active', shieldActive);
+}
+shieldBtn.addEventListener('click', () => {
+  if (state !== 'playing') return;
+  shieldActive = !shieldActive;
+  updateShieldBtn();
+});
 
 // ── Button listeners ──
 document.getElementById('startBtn').addEventListener('click', startGame);
