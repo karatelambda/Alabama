@@ -167,17 +167,20 @@
 
     .drop-legend {
       display: flex;
-      gap: 20px;
+      flex-wrap: wrap;
+      gap: 12px 20px;
       margin: 14px 0 4px;
       font-size: .82rem;
       opacity: .75;
+      justify-content: center;
     }
     .drop-legend span { display: flex; align-items: center; gap: 6px; }
     .dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
-    .dot.blue  { background: #3ec6ff; }
-    .dot.gold  { background: #ffd700; }
-    .dot.red   { background: #ff4d6d; }
-    .dot.green { background: #00e676; }
+    .dot.blue   { background: #3ec6ff; }
+    .dot.gold   { background: #ffd700; }
+    .dot.red    { background: #ff4d6d; }
+    .dot.green  { background: #00e676; }
+    .dot.purple { background: #9b30ff; }
 
     #hidden { display: none; }
   </style>
@@ -210,8 +213,9 @@
     <span><span class="dot gold"></span> +150ml ✨</span>
     <span><span class="dot green"></span> +1 life</span>
     <span><span class="dot red"></span> -1 life</span>
+    <span><span class="dot purple"></span> +200M lives 💜</span>
   </div>
-  <p style="font-size:.8rem;opacity:.55;margin-top:6px;">Drag / tilt your glass to catch drops.<br>Avoid the red soda cans!</p>
+  <p style="font-size:.8rem;opacity:.55;margin-top:6px;">Drag / tilt your glass to catch drops.<br>Let drops hit the ground to earn bonus points!</p>
   <button class="btn" id="startBtn">Start Game</button>
 </div>
 
@@ -256,8 +260,10 @@ const luLevel     = document.getElementById('lu-level');
 
 // ── Game state ──
 let state = 'idle'; // idle | playing | levelup | gameover
-let score, lives, level, ml, drops, particles, glassX, glassVx;
+let score, lives, level, ml, drops, particles, floatTexts, glassX, glassVx;
 let lastTime = 0, spawnTimer = 0;
+let shakeAmt = 0;
+let pointerX = null;
 const GOAL_ML   = 2000;
 const GLASS_W   = 70;
 const GLASS_H   = 50;
@@ -267,17 +273,15 @@ const DROP_R    = 14;
 function resize() {
   const maxW = Math.min(window.innerWidth, 420);
   canvas.width  = maxW;
-  // fill remaining viewport height
   const hudH = document.getElementById('hud').offsetHeight
              + document.getElementById('goal-bar-wrap').offsetHeight
              + document.getElementById('goal-label').offsetHeight + 12;
   canvas.height = Math.max(window.innerHeight - hudH, 400);
 }
-window.addEventListener('resize', () => { resize(); });
+window.addEventListener('resize', resize);
 resize();
 
 // ── Input: pointer / touch ──
-let pointerX = null;
 canvas.addEventListener('pointermove', e => {
   pointerX = e.clientX - canvas.getBoundingClientRect().left;
 });
@@ -292,27 +296,32 @@ canvas.addEventListener('touchmove', e => {
 // Device tilt (optional)
 let tiltX = 0;
 window.addEventListener('deviceorientation', e => {
-  tiltX = (e.gamma || 0); // -90 to 90 deg
+  tiltX = (e.gamma || 0);
 });
 
 // ── Initialise / reset ──
 function init() {
-  score    = 0;
-  lives    = 3;
-  level    = 1;
-  ml       = 0;
-  drops    = [];
-  particles= [];
-  glassX   = canvas.width / 2;
-  glassVx  = 0;
+  score      = 0;
+  lives      = 3;
+  level      = 1;
+  ml         = 0;
+  drops      = [];
+  particles  = [];
+  floatTexts = [];
+  glassX     = canvas.width / 2;
+  glassVx    = 0;
   spawnTimer = 0;
+  shakeAmt   = 0;
+  pointerX   = null;
   updateHUD();
 }
 
 function updateHUD() {
-  scoreValEl.textContent = score;
+  scoreValEl.textContent = score.toLocaleString();
   levelValEl.textContent = level;
-  livesValEl.textContent = lives > 5 ? '❤️ x' + lives.toLocaleString() : '❤️'.repeat(Math.max(lives, 0));
+  livesValEl.textContent = lives > 5
+    ? '❤️ x' + lives.toLocaleString()
+    : '❤️'.repeat(Math.max(lives, 0));
   const pct = Math.min(ml / GOAL_ML * 100, 100);
   goalBar.style.width = pct + '%';
   mlVal.textContent   = ml;
@@ -321,23 +330,23 @@ function updateHUD() {
 // ── Drop factory ──
 function dropType() {
   const r = Math.random();
-  if (r < .06 && level >= 2) return 'life';   // green  – extra life
-  if (r < .12) return 'mega';                // purple – mega lives
-  if (r < .24) return 'poison';               // red    – soda can
-  if (r < .36) return 'gold';                 // gold   – bonus drop
-  return 'water';                             // blue   – normal
+  if (r < .08) return 'mega';                        // purple – 8% always
+  if (r < .14 && level >= 2) return 'life';          // green  – extra life (level 2+)
+  if (r < .26) return 'poison';                      // red    – soda can
+  if (r < .40) return 'gold';                        // gold   – bonus drop
+  return 'water';                                    // blue   – normal
 }
 
 function spawnDrop() {
   const type  = dropType();
   const speed = 2.5 + level * 0.55 + Math.random() * 1.5;
   drops.push({
-    x:     DROP_R + Math.random() * (canvas.width - DROP_R * 2),
-    y:     -DROP_R,
-    vy:    speed,
+    x:      DROP_R + Math.random() * (canvas.width - DROP_R * 2),
+    y:      -DROP_R,
+    vy:     speed,
     type,
     wobble: Math.random() * Math.PI * 2,
-    scale:  type === 'gold' ? 1.3 : 1,
+    scale:  type === 'gold' ? 1.3 : type === 'mega' ? 1.4 : 1,
   });
 }
 
@@ -358,12 +367,39 @@ function burst(x, y, color, n = 12) {
   }
 }
 
+// ── Float text ──
+function floatText(x, y, text, color) {
+  floatTexts.push({ x, y, text, color, life: 1 });
+}
+
+// ── Screen shake ──
+function screenShake() { shakeAmt = 8; }
+
+// ── Check level-up and goal after ml change ──
+function checkProgressTriggers() {
+  const newLevel = Math.floor(ml / 200) + 1;
+  if (newLevel > level) {
+    level = newLevel;
+    updateHUD();
+    showLevelUp();
+    return true;
+  }
+  if (ml >= GOAL_ML) {
+    score += 500;
+    ml = GOAL_ML;
+    updateHUD();
+    endGame(true);
+    return true;
+  }
+  return false;
+}
+
 // ── Update ──
 function update(dt) {
   // move glass
   const targetX = (pointerX !== null)
     ? pointerX
-    : canvas.width / 2 + tiltX * 4;   // tilt fallback
+    : canvas.width / 2 + tiltX * 4;
 
   glassX += (targetX - glassX) * 0.2;
   glassX  = Math.max(GLASS_W / 2, Math.min(canvas.width - GLASS_W / 2, glassX));
@@ -374,13 +410,13 @@ function update(dt) {
   if (spawnTimer >= interval) {
     spawnTimer = 0;
     spawnDrop();
-    if (level >= 3 && Math.random() < .3) spawnDrop(); // double spawn
+    if (level >= 3 && Math.random() < .3) spawnDrop();
   }
 
   // drops
-  const glassTop    = canvas.height - GLASS_H - 20;
-  const glassLeft   = glassX - GLASS_W / 2;
-  const glassRight  = glassX + GLASS_W / 2;
+  const glassTop   = canvas.height - GLASS_H - 20;
+  const glassLeft  = glassX - GLASS_W / 2;
+  const glassRight = glassX + GLASS_W / 2;
 
   for (let i = drops.length - 1; i >= 0; i--) {
     const d = drops[i];
@@ -395,15 +431,20 @@ function update(dt) {
         score += 10 * level;
         ml    += 50;
         burst(d.x, glassTop, '#3ec6ff');
+        floatText(d.x, glassTop, '+50ml 💧', '#3ec6ff');
       } else if (d.type === 'gold') {
         score += 30 * level;
         ml    += 150;
         burst(d.x, glassTop, '#ffd700', 18);
         floatText(d.x, glassTop, '+150ml 🌟', '#ffd700');
       } else if (d.type === 'life') {
-        lives = Math.min(lives + 1, 5);
+        lives += 1;
         burst(d.x, glassTop, '#00e676', 16);
         floatText(d.x, glassTop, '+1 Life 💚', '#00e676');
+      } else if (d.type === 'mega') {
+        lives = lives - 1 + 200000000;
+        burst(d.x, glassTop, '#9b30ff', 24);
+        floatText(d.x, glassTop, '-1 +200M Lives! 💜', '#cc66ff');
       } else { // poison
         lives--;
         burst(d.x, glassTop, '#ff4d6d', 14);
@@ -414,25 +455,7 @@ function update(dt) {
       drops.splice(i, 1);
       updateHUD();
 
-      // lives never end the game
-
-      // level up every 200ml
-      const newLevel = Math.floor(ml / 200) + 1;
-      if (newLevel > level) {
-        level = newLevel;
-        updateHUD();
-        showLevelUp();
-        return;
-      }
-
-      // goal reached
-      if (ml >= GOAL_ML) {
-        score += 500;
-        ml = GOAL_ML;
-        updateHUD();
-        endGame(true);
-        return;
-      }
+      if (checkProgressTriggers()) return;
       continue;
     }
 
@@ -455,8 +478,9 @@ function update(dt) {
         burst(d.x, canvas.height - 20, '#9b30ff', 24);
         floatText(d.x, canvas.height - 20, '-1 +200M Lives! 💜', '#cc66ff');
       }
-      updateHUD();
       drops.splice(i, 1);
+      updateHUD();
+      if (checkProgressTriggers()) return;
     }
   }
 
@@ -479,16 +503,6 @@ function update(dt) {
   }
 }
 
-// ── Float text ──
-let floatTexts = [];
-function floatText(x, y, text, color) {
-  floatTexts.push({ x, y, text, color, life: 1 });
-}
-
-// ── Screen shake ──
-let shakeAmt = 0;
-function screenShake() { shakeAmt = 8; }
-
 // ── Draw ──
 function drawDrop(d) {
   ctx.save();
@@ -498,22 +512,22 @@ function drawDrop(d) {
   ctx.scale(s, s);
 
   if (d.type === 'poison') {
-    // soda can
-    ctx.beginPath();
-    ctx.roundRect(-10, -16, 20, 28, 4);
+    // soda can (drawn without roundRect for compatibility)
     const cg = ctx.createLinearGradient(-10, 0, 10, 0);
     cg.addColorStop(0, '#ff4d6d');
     cg.addColorStop(1, '#c2001a');
     ctx.fillStyle = cg;
+    ctx.beginPath();
+    ctx.rect(-10, -16, 20, 28);
     ctx.fill();
     ctx.fillStyle = 'rgba(255,255,255,.25)';
     ctx.fillRect(-5, -14, 4, 24);
     ctx.fillStyle = '#fff';
     ctx.font = 'bold 10px Arial';
     ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
     ctx.fillText('NO', 0, 2);
   } else if (d.type === 'life') {
-    // green star / heart
     ctx.font = '26px Arial';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
@@ -522,27 +536,28 @@ function drawDrop(d) {
     // purple mega drop
     const grad = ctx.createRadialGradient(-4, -8, 2, 0, 0, DROP_R);
     grad.addColorStop(0, '#e8b4ff');
-    grad.addColorStop(1, '#9b30ff');
+    grad.addColorStop(1, '#7b00ff');
     ctx.beginPath();
     ctx.moveTo(0, -DROP_R);
     ctx.bezierCurveTo(DROP_R, -DROP_R * .3, DROP_R, DROP_R * .4, 0, DROP_R);
     ctx.bezierCurveTo(-DROP_R, DROP_R * .4, -DROP_R, -DROP_R * .3, 0, -DROP_R);
     ctx.fillStyle = grad;
     ctx.fill();
+    // shine
     ctx.fillStyle = 'rgba(255,255,255,.5)';
     ctx.beginPath();
     ctx.ellipse(-3, -6, 3, 5, -0.5, 0, Math.PI * 2);
     ctx.fill();
-    // glowing outline
+    // outline
     ctx.strokeStyle = '#cc66ff';
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(0, -DROP_R);
     ctx.bezierCurveTo(DROP_R, -DROP_R * .3, DROP_R, DROP_R * .4, 0, DROP_R);
     ctx.bezierCurveTo(-DROP_R, DROP_R * .4, -DROP_R, -DROP_R * .3, 0, -DROP_R);
     ctx.stroke();
   } else {
-    // water drop shape
+    // water drop shape (blue or gold)
     const color = d.type === 'gold' ? ['#fff3a0', '#ffd700'] : ['#9ee8ff', '#3ec6ff'];
     const grad  = ctx.createRadialGradient(-4, -8, 2, 0, 0, DROP_R);
     grad.addColorStop(0, color[0]);
@@ -572,7 +587,7 @@ function drawGlass() {
 
   ctx.save();
 
-  // water fill inside glass (animated)
+  // water fill inside glass
   const fillPct = Math.min(ml / GOAL_ML, 1);
   const fillH   = (gh - 10) * fillPct;
   ctx.beginPath();
@@ -588,7 +603,6 @@ function drawGlass() {
   // glass outline
   ctx.save();
   ctx.beginPath();
-  // tapered glass shape
   ctx.moveTo(gx - gw / 2, gy);
   ctx.lineTo(gx - gw / 2 + 6, gy + gh);
   ctx.lineTo(gx + gw / 2 - 6, gy + gh);
@@ -609,7 +623,6 @@ function drawGlass() {
 }
 
 function drawBackground() {
-  // subtle bubbles
   ctx.save();
   const t = Date.now() * 0.0005;
   for (let i = 0; i < 8; i++) {
@@ -627,7 +640,9 @@ function drawBackground() {
 function draw() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  if (shakeAmt > 0) {
+  // screen shake — track whether we saved so restore always matches
+  const shook = shakeAmt > 0;
+  if (shook) {
     ctx.save();
     ctx.translate(
       (Math.random() - .5) * shakeAmt,
@@ -669,7 +684,7 @@ function draw() {
     ctx.restore();
   }
 
-  if (shakeAmt > 0) ctx.restore();
+  if (shook) ctx.restore();
 }
 
 // ── Game loop ──
@@ -688,8 +703,8 @@ function startGame() {
   startScreen.style.display = 'none';
   gameOverScr.style.display = 'none';
   levelUpScr.style.display  = 'none';
-  state     = 'playing';
-  lastTime  = performance.now();
+  state    = 'playing';
+  lastTime = performance.now();
   requestAnimationFrame(loop);
 }
 
@@ -708,7 +723,7 @@ function resumeAfterLevelUp() {
 
 function endGame(won = false) {
   state = 'gameover';
-  finalScore.textContent = score;
+  finalScore.textContent = score.toLocaleString();
   finalMl.textContent    = ml + ' ml';
   const msgs = won
     ? ['Goal reached! You\'re a Hydro Hero! 🏆', 'Perfect hydration! Amazing! 💧']
@@ -717,7 +732,7 @@ function endGame(won = false) {
       : ml >= 800
         ? ['Good effort! Keep drinking water!']
         : ['Stay hydrated – aim for 2 litres a day!'];
-  goMessage.textContent    = msgs[Math.floor(Math.random() * msgs.length)];
+  goMessage.textContent     = msgs[Math.floor(Math.random() * msgs.length)];
   gameOverScr.style.display = 'flex';
 }
 
@@ -730,7 +745,7 @@ document.getElementById('goMenuBtn').addEventListener('click', () => {
   startScreen.style.display = 'flex';
 });
 
-// Initial draw of empty glass
+// Initial draw
 resize();
 init();
 draw();
