@@ -263,13 +263,6 @@
   <button class="btn btn-secondary" id="goMenuBtn">Menu</button>
 </div>
 
-<!-- Level Up -->
-<div class="overlay" id="levelUpScreen" style="display:none;">
-  <h2>Level Up! 🎉</h2>
-  <div class="big-score" id="lu-level">2</div>
-  <p>Drops are falling faster. Stay hydrated!</p>
-  <button class="btn" id="continueBtn">Continue</button>
-</div>
 
 <script>
 // ─────────────────────────────────────────────
@@ -286,11 +279,10 @@ const goalBar     = document.getElementById('goal-bar');
 const mlVal       = document.getElementById('ml-val');
 const startScreen = document.getElementById('startScreen');
 const gameOverScr = document.getElementById('gameOverScreen');
-const levelUpScr  = document.getElementById('levelUpScreen');
+
 const finalScore  = document.getElementById('final-score');
 const finalMl     = document.getElementById('final-ml');
 const goMessage   = document.getElementById('go-message');
-const luLevel     = document.getElementById('lu-level');
 
 // ── Game state ──
 let state = 'idle'; // idle | playing | levelup | gameover
@@ -420,8 +412,8 @@ function checkProgressTriggers() {
   if (newLevel > level) {
     level = newLevel;
     updateHUD();
-    showLevelUp();
-    return true;
+    floatText(canvas.width / 2, canvas.height / 2, `⬆️ Level ${level}!`, '#7fe8ff');
+    return false; // game keeps running
   }
   if (ml >= GOAL_ML) {
     score += 500;
@@ -825,20 +817,6 @@ function startGame() {
   init();
   startScreen.style.display = 'none';
   gameOverScr.style.display = 'none';
-  levelUpScr.style.display  = 'none';
-  state    = 'playing';
-  lastTime = performance.now();
-  requestAnimationFrame(loop);
-}
-
-function showLevelUp() {
-  state = 'levelup';
-  luLevel.textContent = level;
-  levelUpScr.style.display = 'flex';
-}
-
-function resumeAfterLevelUp() {
-  levelUpScr.style.display = 'none';
   state    = 'playing';
   lastTime = performance.now();
   requestAnimationFrame(loop);
@@ -874,7 +852,6 @@ shieldBtn.addEventListener('click', () => {
 // ── Button listeners ──
 document.getElementById('startBtn').addEventListener('click', startGame);
 document.getElementById('restartBtn').addEventListener('click', startGame);
-document.getElementById('continueBtn').addEventListener('click', resumeAfterLevelUp);
 document.getElementById('goMenuBtn').addEventListener('click', () => {
   gameOverScr.style.display = 'none';
   startScreen.style.display = 'flex';
