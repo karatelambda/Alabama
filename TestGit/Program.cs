@@ -11,6 +11,12 @@ namespace TestGit
 		static void Main(string[] args)
 		{
 			int i = 0;
+			gd();
+		}
+
+		static void gd()
+		{
+			Console.WriteLine("Good day!");
 		}
 	}
 }
