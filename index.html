@@ -249,7 +249,7 @@
   let score = 0, best = parseInt(localStorage.getItem('fb_best') || '0');
   startBestEl.textContent = 'Best: ' + best;
 
-  let birdX, birdY, birdVY, birdAngle;
+  let birdX, birdY, birdVX, birdVY, birdAngle;
   let pipes = [];
   let lastPipeTime = 0;
   let bgOffset = 0;
@@ -286,6 +286,7 @@
   function initBird() {
     birdX    = W * 0.28;
     birdY    = H * 0.45;
+    birdVX   = 0;
     birdVY   = 0;
     birdAngle= 0;
   }
@@ -314,7 +315,7 @@
   }
 
   function jump() {
-    birdVY = JUMP_VEL;
+    birdVX = JUMP_VEL;
     spawnJumpParticles();
   }
 
@@ -576,9 +577,10 @@
       }
 
       // Bird physics
-      birdVY    += GRAVITY * dt;
+      birdVX    += GRAVITY * dt;
+      birdX     += birdVX * dt;
       birdY     += birdVY * dt;
-      birdAngle  = Math.max(-0.5, Math.min(Math.PI / 2, birdVY * 0.045));
+      birdAngle  = Math.max(-0.5, Math.min(Math.PI / 2, birdVX * 0.045));
 
       // Pipes
       if (!lastPipeTime || now - lastPipeTime > PIPE_INTERVAL) spawnPipe(now);
@@ -591,7 +593,7 @@
           scoreEl.textContent = score;
           flashScore();
         }
-        // if (hitsPipe(p)) die();
+        if (hitsPipe(p)) die();
       }
       pipes = pipes.filter(p => p.x + PIPE_W > -10);
 
