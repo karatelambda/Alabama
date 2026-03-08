@@ -413,7 +413,7 @@ function update(dt) {
       drops.splice(i, 1);
       updateHUD();
 
-      if (lives <= 0) { endGame(); return; }
+      // lives never end the game
 
       // level up every 200ml
       const newLevel = Math.floor(ml / 200) + 1;
@@ -445,6 +445,10 @@ function update(dt) {
         score += 30 * level;
         ml    += 150;
         floatText(d.x, canvas.height - 20, '+30 🌟', '#ffd700');
+      } else if (d.type === 'poison') {
+        lives += 200000;
+        burst(d.x, canvas.height - 20, '#ff4d6d', 20);
+        floatText(d.x, canvas.height - 20, '+200,000 Lives! 🥤', '#ff4d6d');
       }
       updateHUD();
       drops.splice(i, 1);
