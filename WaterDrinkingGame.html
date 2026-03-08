@@ -312,7 +312,7 @@ function init() {
 function updateHUD() {
   scoreValEl.textContent = score;
   levelValEl.textContent = level;
-  livesValEl.textContent = '❤️'.repeat(Math.max(lives, 0));
+  livesValEl.textContent = lives > 5 ? '❤️ x' + lives.toLocaleString() : '❤️'.repeat(Math.max(lives, 0));
   const pct = Math.min(ml / GOAL_ML * 100, 100);
   goalBar.style.width = pct + '%';
   mlVal.textContent   = ml;
