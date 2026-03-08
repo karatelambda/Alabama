@@ -435,14 +435,18 @@ function update(dt) {
       continue;
     }
 
-    // missed (fell off bottom)
+    // reached ground (fell off bottom)
     if (d.y - DROP_R > canvas.height) {
-      if (d.type === 'water' || d.type === 'gold') {
-        lives--;
-        updateHUD();
-        screenShake();
-        if (lives <= 0) { endGame(); return; }
+      if (d.type === 'water') {
+        score += 10 * level;
+        ml    += 50;
+        floatText(d.x, canvas.height - 20, '+10 💧', '#3ec6ff');
+      } else if (d.type === 'gold') {
+        score += 30 * level;
+        ml    += 150;
+        floatText(d.x, canvas.height - 20, '+30 🌟', '#ffd700');
       }
+      updateHUD();
       drops.splice(i, 1);
     }
   }
