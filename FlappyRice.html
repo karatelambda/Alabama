@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Flappy Rice</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #1a1a2e;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      font-family: 'Segoe UI', sans-serif;
+      overflow: hidden;
+    }
+    canvas {
+      border: 3px solid #e8c84a;
+      border-radius: 8px;
+      box-shadow: 0 0 30px rgba(232, 200, 74, 0.4);
+      image-rendering: pixelated;
+    }
+    #ui {
+      position: absolute;
+      text-align: center;
+      color: #e8c84a;
+      pointer-events: none;
+    }
+    h1 {
+      font-size: 2rem;
+      letter-spacing: 2px;
+      text-shadow: 0 0 10px rgba(232, 200, 74, 0.6);
+      margin-bottom: 8px;
+    }
+    #instructions {
+      font-size: 0.85rem;
+      color: #aaa;
+      margin-top: 8px;
+    }
+  </style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<script>
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+
+const W = 400;
+const H = 600;
+canvas.width = W;
+canvas.height = H;
+
+// Game state
+const STATE = { MENU: 0, PLAYING: 1, DEAD: 2 };
+let state = STATE.MENU;
+
+// Physics
+const GRAVITY = 0.45;
+const JUMP = -8.5;
+const PIPE_SPEED = 2.8;
+const PIPE_GAP = 160;
+const PIPE_INTERVAL = 1600; // ms
+
+// Rice grain (player)
+const rice = {
+  x: 80,
+  y: H / 2,
+  vy: 0,
+  w: 28,
+  h: 18,
+  angle: 0,
+
+  reset() {
+    this.y = H / 2;
+    this.vy = 0;
+    this.angle = 0;
+  },
+
+  jump() {
+    this.vy = JUMP;
+  },
+
+  update() {
+    this.vy += GRAVITY;
+    this.y += this.vy;
+    // Tilt: nose up on ascent, nose down on descent
+    const targetAngle = Math.max(-30, Math.min(80, this.vy * 4));
+    this.angle += (targetAngle - this.angle) * 0.15;
+  },
+
+  draw() {
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.rotate((this.angle * Math.PI) / 180);
+
+    // Rice grain shadow
+    ctx.shadowColor = 'rgba(0,0,0,0.4)';
+    ctx.shadowBlur = 6;
+    ctx.shadowOffsetY = 3;
+
+    // Rice body (white oval)
+    const grad = ctx.createRadialGradient(-4, -4, 2, 0, 0, this.w * 0.7);
+    grad.addColorStop(0, '#fffef0');
+    grad.addColorStop(0.6, '#f5f0d8');
+    grad.addColorStop(1, '#e0d8b0');
+    ctx.fillStyle = grad;
+
+    ctx.beginPath();
+    ctx.ellipse(0, 0, this.w / 2, this.h / 2, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Rice grain line details
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetY = 0;
+    ctx.strokeStyle = 'rgba(180, 160, 100, 0.5)';
+    ctx.lineWidth = 0.8;
+    ctx.beginPath();
+    ctx.moveTo(-this.w / 2 + 4, 0);
+    ctx.lineTo(this.w / 2 - 4, 0);
+    ctx.stroke();
+
+    // Small face
+    ctx.fillStyle = '#555';
+    // Eyes
+    ctx.beginPath();
+    ctx.arc(6, -3, 2, 0, Math.PI * 2);
+    ctx.fill();
+    // Mouth - smile or grimace based on speed
+    ctx.strokeStyle = '#555';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    if (this.vy < 2) {
+      ctx.arc(6, -1, 2.5, 0, Math.PI);
+    } else {
+      ctx.arc(6, 1, 2.5, Math.PI, 0);
+    }
+    ctx.stroke();
+
+    ctx.restore();
+  },
+
+  getBounds() {
+    const r = 7;
+    return { x: this.x - r, y: this.y - r, w: r * 2, h: r * 2 };
+  }
+};
+
+// Pipes (chopsticks!)
+let pipes = [];
+let lastPipeTime = 0;
+let score = 0;
+let best = 0;
+let frameCount = 0;
+let particles = [];
+
+function spawnPipe() {
+  const minY = 80;
+  const maxY = H - 80 - PIPE_GAP;
+  const gapY = minY + Math.random() * (maxY - minY);
+  pipes.push({
+    x: W + 20,
+    gapY,
+    w: 52,
+    scored: false
+  });
+}
+
+function drawChopstick(x, top, bottom, isTop) {
+  const w = 52;
+  // Chopstick body
+  const grad = ctx.createLinearGradient(x, 0, x + w, 0);
+  grad.addColorStop(0, '#8B4513');
+  grad.addColorStop(0.3, '#cd853f');
+  grad.addColorStop(0.7, '#daa520');
+  grad.addColorStop(1, '#8B4513');
+  ctx.fillStyle = grad;
+
+  if (isTop) {
+    // Top chopstick (pointing down)
+    ctx.fillRect(x, 0, w, top);
+    // Tip taper
+    ctx.fillStyle = '#cd853f';
+    ctx.beginPath();
+    ctx.moveTo(x + 6, top);
+    ctx.lineTo(x + w - 6, top);
+    ctx.lineTo(x + w / 2, top + 12);
+    ctx.closePath();
+    ctx.fill();
+    // Decorative band at top
+    ctx.fillStyle = '#c8860a';
+    ctx.fillRect(x, 8, w, 6);
+    ctx.fillStyle = '#f0c040';
+    ctx.fillRect(x, 10, w, 2);
+  } else {
+    // Bottom chopstick (pointing up)
+    ctx.fillRect(x, bottom, w, H - bottom);
+    // Tip taper
+    ctx.fillStyle = '#cd853f';
+    ctx.beginPath();
+    ctx.moveTo(x + 6, bottom);
+    ctx.lineTo(x + w - 6, bottom);
+    ctx.lineTo(x + w / 2, bottom - 12);
+    ctx.closePath();
+    ctx.fill();
+    // Decorative band at bottom
+    ctx.fillStyle = '#c8860a';
+    ctx.fillRect(x, H - 14, w, 6);
+    ctx.fillStyle = '#f0c040';
+    ctx.fillRect(x, H - 12, w, 2);
+  }
+
+  // Grain lines on chopstick
+  ctx.strokeStyle = 'rgba(100, 50, 10, 0.3)';
+  ctx.lineWidth = 0.7;
+  for (let i = 1; i < 4; i++) {
+    ctx.beginPath();
+    ctx.moveTo(x + (w / 4) * i, isTop ? 0 : bottom);
+    ctx.lineTo(x + (w / 4) * i, isTop ? top : H);
+    ctx.stroke();
+  }
+}
+
+// Particle system for score pops
+function spawnScoreParticles(x, y) {
+  for (let i = 0; i < 12; i++) {
+    const angle = (Math.PI * 2 * i) / 12;
+    particles.push({
+      x, y,
+      vx: Math.cos(angle) * (1.5 + Math.random() * 2),
+      vy: Math.sin(angle) * (1.5 + Math.random() * 2),
+      life: 1,
+      decay: 0.03 + Math.random() * 0.02,
+      size: 4 + Math.random() * 4,
+      color: `hsl(${45 + Math.random() * 30}, 90%, 65%)`
+    });
+  }
+}
+
+function updateParticles() {
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.x += p.vx;
+    p.y += p.vy;
+    p.vy += 0.1;
+    p.life -= p.decay;
+    if (p.life <= 0) particles.splice(i, 1);
+  }
+}
+
+function drawParticles() {
+  particles.forEach(p => {
+    ctx.globalAlpha = p.life;
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.ellipse(p.x, p.y, p.size, p.size / 2, 0, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  ctx.globalAlpha = 1;
+}
+
+// Background: scrolling bowl pattern
+let bgOffset = 0;
+function drawBackground() {
+  // Sky gradient
+  const sky = ctx.createLinearGradient(0, 0, 0, H);
+  sky.addColorStop(0, '#0d1117');
+  sky.addColorStop(1, '#1a2a1a');
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, W, H);
+
+  // Scrolling rice grain bg pattern
+  ctx.globalAlpha = 0.07;
+  ctx.fillStyle = '#f5f0d8';
+  const spacing = 40;
+  for (let row = 0; row < H / spacing + 1; row++) {
+    for (let col = 0; col < W / spacing + 1; col++) {
+      const x = (col * spacing + (row % 2) * 20 + bgOffset) % (W + spacing) - spacing / 2;
+      const y = row * spacing;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(0.4);
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 6, 3, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
+// Ground/floor
+function drawGround() {
+  ctx.fillStyle = '#2d1b00';
+  ctx.fillRect(0, H - 20, W, 20);
+  // Bowl rim
+  const rimGrad = ctx.createLinearGradient(0, H - 20, 0, H);
+  rimGrad.addColorStop(0, '#8B4513');
+  rimGrad.addColorStop(0.3, '#cd853f');
+  rimGrad.addColorStop(1, '#5c2d00');
+  ctx.fillStyle = rimGrad;
+  ctx.fillRect(0, H - 20, W, 6);
+}
+
+// HUD
+function drawHUD() {
+  // Score
+  ctx.fillStyle = '#e8c84a';
+  ctx.font = 'bold 36px "Segoe UI", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.shadowColor = 'rgba(0,0,0,0.5)';
+  ctx.shadowBlur = 4;
+  ctx.fillText(score, W / 2, 60);
+  ctx.shadowBlur = 0;
+}
+
+function drawMenu() {
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+  ctx.fillRect(0, 0, W, H);
+
+  // Title
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#e8c84a';
+  ctx.font = 'bold 48px "Segoe UI", sans-serif';
+  ctx.shadowColor = 'rgba(232, 200, 74, 0.7)';
+  ctx.shadowBlur = 20;
+  ctx.fillText('🍚 Flappy Rice', W / 2, H / 2 - 80);
+  ctx.shadowBlur = 0;
+
+  ctx.fillStyle = '#fff';
+  ctx.font = '20px "Segoe UI", sans-serif';
+  ctx.fillText('Dodge the chopsticks!', W / 2, H / 2 - 30);
+
+  // Bouncing prompt
+  const bounce = Math.sin(Date.now() / 400) * 5;
+  ctx.fillStyle = '#e8c84a';
+  ctx.font = 'bold 18px "Segoe UI", sans-serif';
+  ctx.fillText('Tap / Press Space to Start', W / 2, H / 2 + 30 + bounce);
+
+  if (best > 0) {
+    ctx.fillStyle = '#aaa';
+    ctx.font = '16px "Segoe UI", sans-serif';
+    ctx.fillText(`Best: ${best}`, W / 2, H / 2 + 70);
+  }
+  ctx.shadowBlur = 0;
+}
+
+function drawDead() {
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#e8e8e8';
+  ctx.font = 'bold 40px "Segoe UI", sans-serif';
+  ctx.fillText('Game Over', W / 2, H / 2 - 80);
+
+  ctx.fillStyle = '#e8c84a';
+  ctx.font = 'bold 56px "Segoe UI", sans-serif';
+  ctx.fillText(score, W / 2, H / 2 - 20);
+
+  ctx.fillStyle = '#aaa';
+  ctx.font = '18px "Segoe UI", sans-serif';
+  ctx.fillText(`Best: ${best}`, W / 2, H / 2 + 30);
+
+  const bounce = Math.sin(Date.now() / 400) * 5;
+  ctx.fillStyle = '#e8c84a';
+  ctx.font = 'bold 18px "Segoe UI", sans-serif';
+  ctx.fillText('Tap / Press Space to Restart', W / 2, H / 2 + 80 + bounce);
+}
+
+function checkCollision() {
+  const b = rice.getBounds();
+  // Floor/ceiling
+  if (rice.y + rice.h / 2 >= H - 20 || rice.y - rice.h / 2 <= 0) return true;
+
+  for (const pipe of pipes) {
+    if (
+      b.x + b.w > pipe.x + 4 &&
+      b.x < pipe.x + pipe.w - 4 &&
+      (b.y < pipe.gapY || b.y + b.h > pipe.gapY + PIPE_GAP)
+    ) return true;
+  }
+  return false;
+}
+
+function startGame() {
+  rice.reset();
+  pipes = [];
+  score = 0;
+  particles = [];
+  lastPipeTime = performance.now() + 800;
+  state = STATE.PLAYING;
+  rice.jump();
+}
+
+function handleInput() {
+  if (state === STATE.MENU || state === STATE.DEAD) {
+    startGame();
+  } else if (state === STATE.PLAYING) {
+    rice.jump();
+  }
+}
+
+document.addEventListener('keydown', e => {
+  if (e.code === 'Space' || e.code === 'ArrowUp') {
+    e.preventDefault();
+    handleInput();
+  }
+});
+canvas.addEventListener('pointerdown', e => {
+  e.preventDefault();
+  handleInput();
+});
+
+let lastTime = 0;
+function loop(ts) {
+  const now = ts || performance.now();
+  const dt = now - lastTime;
+  lastTime = now;
+
+  bgOffset = (bgOffset - 0.5) % 40;
+
+  drawBackground();
+
+  if (state === STATE.PLAYING) {
+    frameCount++;
+
+    // Spawn pipes
+    if (now - lastPipeTime > PIPE_INTERVAL) {
+      spawnPipe();
+      lastPipeTime = now;
+    }
+
+    // Update pipes
+    for (let i = pipes.length - 1; i >= 0; i--) {
+      pipes[i].x -= PIPE_SPEED;
+      if (!pipes[i].scored && pipes[i].x + pipes[i].w < rice.x) {
+        pipes[i].scored = true;
+        score++;
+        spawnScoreParticles(rice.x + 20, rice.y);
+      }
+      if (pipes[i].x + pipes[i].w < -20) pipes.splice(i, 1);
+    }
+
+    rice.update();
+
+    if (checkCollision()) {
+      if (score > best) best = score;
+      state = STATE.DEAD;
+    }
+  }
+
+  // Draw pipes
+  pipes.forEach(p => {
+    drawChopstick(p.x, p.gapY, p.gapY + PIPE_GAP, true);
+    drawChopstick(p.x, p.gapY, p.gapY + PIPE_GAP, false);
+  });
+
+  drawGround();
+  updateParticles();
+  drawParticles();
+
+  if (state !== STATE.MENU) rice.draw();
+
+  if (state === STATE.PLAYING) drawHUD();
+  else if (state === STATE.MENU) drawMenu();
+  else if (state === STATE.DEAD) drawDead();
+
+  requestAnimationFrame(loop);
+}
+
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
