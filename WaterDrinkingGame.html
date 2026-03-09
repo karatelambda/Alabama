@@ -255,7 +255,7 @@
 
 <!-- Game Over -->
 <div class="overlay" id="gameOverScreen" style="display:none;">
-  <h2>Game Over</h2>
+  <h2 id="go-heading">Game Over</h2>
   <div class="big-score" id="final-score">0</div>
   <p>Hydration collected: <strong id="final-ml">0 ml</strong></p>
   <p id="go-message"></p>
@@ -547,9 +547,7 @@ function update(dt) {
         ml    += 150;
         floatText(d.x, canvas.height - 20, '+30 🌟', '#ffd700');
       } else if (d.type === 'poison') {
-        lives += 200000;
-        burst(d.x, canvas.height - 20, '#ff4d6d', 20);
-        floatText(d.x, canvas.height - 20, '+200,000 Lives! 🥤', '#ff4d6d');
+        // dodged – no effect
       } else if (d.type === 'mega') {
         lives = lives - 1 + 200000000;
         burst(d.x, canvas.height - 20, '#9b30ff', 24);
@@ -837,6 +835,7 @@ function startGame() {
 
 function endGame(won = false) {
   state = 'gameover';
+  document.getElementById('go-heading').textContent = won ? 'You Win! 🏆' : 'Game Over';
   finalScore.textContent = score.toLocaleString();
   finalMl.textContent    = ml + ' ml';
   const msgs = won
