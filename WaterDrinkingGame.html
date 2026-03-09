@@ -514,12 +514,25 @@ function update(dt) {
         burst(d.x, glassTop, '#ff4d6d', 14);
         floatText(d.x, glassTop, '-1 Life 💀', '#ff4d6d');
         screenShake();
+        if (lives <= 0) {
+          lives = 0;
+          drops.splice(i, 1);
+          updateHUD();
+          endGame(false);
+          return;
+        }
       }
 
       drops.splice(i, 1);
       updateHUD();
 
       if (checkProgressTriggers()) return;
+      continue;
+    }
+
+    // flew off the top (e.g. shield bounce)
+    if (d.y + DROP_R < 0) {
+      drops.splice(i, 1);
       continue;
     }
 
